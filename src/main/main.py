@@ -1,8 +1,6 @@
-import os
+import os, sys
 from collections import Counter
 from ggplot import *
-import sys
-from model import Model
 from preprocess import TripTypeDataSet, DataSet
 from preprocess import mergeDescriptions
 from copy import deepcopy
@@ -110,12 +108,9 @@ def writeTestSet(visitNumbers, classToIndex, predProbPerSample, outfile):
   df = pd.DataFrame(columns=cols)
   i = 0
   for visitNumber in visitNumbers:
-    #l = list(np.zeros(len(indexToClass)))
     l = ['{:.4f}'.format(x) for x in  list(predProbPerSample[i,]) ]
     classL = [indexToClass[np.argmax(l)]]
-    #il[labelToIndex[predLabelsPerSample[i]]+1] = 1
     il = [visitNumber] + l + classL
-    #print('{} {}'.format(len(cols),len(il)))
     df.loc[i] = il
     i += 1
     if ((i % 500) == 0):
@@ -151,8 +146,6 @@ if __name__=="__main__":
   # plots heatmap of feature correlations
   #plotFeatureCorrs(trainSet)
   
-  
-  
   # get raw train and test matrices
   yTrain = np.asarray(trainSet.df['TripType'])
   xTrain = np.asanyarray(trainSet.df.drop(['TripType', 'VisitNumber'], axis=1))
@@ -187,9 +180,8 @@ if __name__=="__main__":
     for reference in modelList[:origLen]:
       modelList.extend([deepcopy(reference)])
   print(modelList)
-              # DNNModel(iterations=50)]*10
-               #XgboostModel(params={'max_depth': 10, 'eval_metric': 'mlogloss'}, nrIterations=10)
-               #]
+               
+               
   #train adaboost
   adaBoost = AdaBoost(modelList)
   trainTestSplits = 4
@@ -198,7 +190,7 @@ if __name__=="__main__":
   #(predLabels, predProb, classToIndex) = adaBoost.learn(xTrain, yTrain, verbose=True)
   #predLabelsTest, predProbTest = adaBoost.predict(xTest) 
   
-  # uncomment to write the predictions for the test set to a file (can take a while)
+  # uncomment to write the predictions for the test set to a file 
   #writeTestSet(list(testSet.df['VisitNumber']), classToIndex, predProbTest, os.path.join(datafolder, 'testpred.csv'))
   
   

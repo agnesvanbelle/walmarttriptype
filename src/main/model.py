@@ -6,8 +6,8 @@ import xgboost as xgb
 from sklearn import metrics
 import numpy as np
 import tensorflow as tf
-from scipy.stats import entropy
 from multiprocessing import cpu_count
+from sklearn.cross_validation import ShuffleSplit, StratifiedShuffleSplit
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 tf.logging.set_verbosity(tf.logging.WARN)
@@ -33,7 +33,7 @@ class Model(ABC):
     verbose (optional): if True, print scores after learning. Default: False.
     classToIndex (optional): dictionary mapping each class label in y to its index in the
                               probability matrix
-    output: tuple of size 3 with:
+    returns: tuple of size 3 with:
               predicted labels: 1D array of length N with predicted class per sample
               predicted probabilities: NxD array where D is the number of classes
               class to index dictionary: dictionary from class label to column index in 
@@ -43,6 +43,13 @@ class Model(ABC):
   
   @abstractmethod
   def predict(self, newX):
+    '''
+    newX: NxM array where N is number of samples and M the number of features
+    
+    returns: tuple of size 2 with:
+      predicted labels: 1D array of length N with predicted class per sample
+      predicted probabilities: NxD array where D is the number of classes
+    '''
     pass
   
   @staticmethod
@@ -57,20 +64,12 @@ class Model(ABC):
     yTrue: 1D array with true class label per samples
     predProb: NxD array where N is nr. samples and D number labels. 
     classToIndex: a dictionary mapping each class label to its column index in predProb
-    output: tuple with the log loss average over sample (float) and 1D array with log loss per sample
+    returns: tuple with the log loss average over sample (float) and 1D array with log loss per sample
     '''
-    
     sampleWeights = np.ones(yTrue.shape[0]) if len(sampleWeights) == 0 else sampleWeights
 
-    #indexToClass = {k:v for v,k in classToIndex.iteritems()}
-    #predClassesProb = [indexToClass[x] for x  in list(np.argmax(predProb, axis=1))]
-    #print('scores in predProb: {}'.format(Model.getCommonMetricScores(yTrue, predClassesProb, sampleWeights)))
-    
     nrSamples = yTrue.shape[0]
-    #errorRateLabeled = np.sum(yPredLabels != yTrue) / float(nrSamples)
     logLossPerSample = np.zeros(nrSamples)
-    #print('classToIndex: {}'.format(classToIndex))
-    #print(' yTrue.shape[0]: {}'.format(yTrue.shape[0]))
     actualProb = np.zeros((yTrue.shape[0], len(classToIndex)))
     counterSamples = 0
     for sampleIndex in range(len(predProb)):
@@ -80,18 +79,10 @@ class Model(ABC):
       counterSamples +=1 
       correctLabelIndex = classToIndex[correctLabel] # column index  of label in predProb matrix
       actualProb[sampleIndex][correctLabelIndex]=1.0
-      #print(np.array([actualProb[sampleIndex]]))
-      #print(np.array([predProb[sampleIndex]]))
-      #print(metrics.log_loss(np.array([actualProb[sampleIndex]]), np.array([predProb[sampleIndex]])) * \
-      #  sampleWeights[sampleIndex] )
       logLossPerSample[sampleIndex] = metrics.log_loss(np.array([actualProb[sampleIndex]]), np.array([predProb[sampleIndex]])) * \
         sampleWeights[sampleIndex] 
     logLossAverage = np.sum(logLossPerSample) / float(counterSamples)
-    #print('Test error using labels = {0:2.4f}'.format(errorRateLabeled))
-    #print('getLogLoss: {:d} samples had class label not in train data'.format(len(predProb)-counterSamples))
-    #entropySum = np.sum(np.apply_along_axis(entropy, 1, predProb))
-    #print('entropy: {:2.4f}'.format(entropySum))
-    
+
     return (logLossAverage, logLossPerSample)
   
   @staticmethod
@@ -100,7 +91,7 @@ class Model(ABC):
     predLabels: list of predicted class-indices
     classToIndex: dictionary from class label to its index
                   Also see :func:`model.Model.mapClasses`
-    output: list with the original class label or each class-index in predLabels
+    returns: list with the original class label or each class-index in predLabels
     '''
     classesUniqueSorted = sorted(list(classToIndex.keys()))
     return np.array(list(map(lambda x: classesUniqueSorted[x], predLabels)))
@@ -109,7 +100,7 @@ class Model(ABC):
   def mapClasses(yData):
     '''
     yData: 1D array with true class label per sample
-    output: a dictionary mapping each true class to an integer in [0,number classes].
+    returns: a dictionary mapping each true class to an integer in [0,number classes].
             this can be used to transform the input before giving it to a learning 
             algorithm in which the classes need to be defined as such a range.
             Also see :func:`model.Model.unmapClasses`
@@ -119,6 +110,13 @@ class Model(ABC):
     for i in range(len(classesUniqueSorted)):
       classToIndex[classesUniqueSorted[i]]=i
     return classToIndex
+  
+  @staticmethod
+  def getTrainTestSplits(y, n, fractionTest):
+    try:
+      return StratifiedShuffleSplit(y, n_iter=n, test_size=fractionTest)
+    except ValueError:
+      return ShuffleSplit(y.shape[0], n_iter=n, test_size=fractionTest)
    
 class DNNModel(Model):
   
@@ -136,9 +134,6 @@ class DNNModel(Model):
       
     feature_columns = [ tf.feature_column.numeric_column( 'x', shape=x.shape[1])]
     trainWeights = np.ones(y.shape).reshape(y.shape[0],1) if len(weights) == 0 else weights.reshape(y.shape[0],1)
-    
-    #print('trainWeights:{}'.format(trainWeights))
-    
     trainInputFn = tf.estimator.inputs.numpy_input_fn(x={'x': x, 'weights' : trainWeights}, y=yNewClass.reshape(y.shape[0],1), shuffle=True, num_epochs=self.iterations)
      
     # uses L2 loss

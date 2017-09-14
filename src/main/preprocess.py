@@ -5,7 +5,7 @@ from collections import Counter
 from itertools import combinations
 import re
 from nltk.corpus import stopwords
-from multiprocessing import Pool, TimeoutError, cpu_count
+from multiprocessing import Pool, cpu_count
 
 stopwordsEnglish = set(stopwords.words('english'))
 
